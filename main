@@ -1,0 +1,84 @@
+import os
+import streamlit as st
+from openai import OpenAI
+
+api_key = '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'
+client = OpenAI(api_key=api_key)
+
+
+# Function to generate a quiz question
+def generate_quiz_question(topic):
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "user", "content": f"Create a multiple-choice question with answers about {topic} and specify the correct answer."}
+            ]
+        )
+        if completion.choices and completion.choices[0].message:
+            return completion.choices[0].message.content
+        else:
+            return "No response generated.", []
+    except Exception as e:
+        return f"An error occurred: {e}", []
+
+# Function to parse the question, answers, and the correct answer
+def parse_question_answers_correct(text):
+    parts = text.split('\n')
+    question = parts[0]
+    answers = parts[1:-1]
+    correct_answer = parts[-1].split(': ')[-1]  # Assuming the format "Correct answer: X"
+    return question, answers, correct_answer.strip()
+
+# Function to reset the quiz state
+def reset_quiz_state():
+    st.session_state.current_question = 0
+    st.session_state.user_answers = []
+    st.session_state.correct_answers = []
+    st.session_state.questions = []
+    st.session_state.options = []
+    st.session_state.scores = []
+
+# Initialize session state
+if 'current_question' not in st.session_state:
+    reset_quiz_state()
+
+st.title('MCQ Quiz Application')
+
+topic = st.text_input('Enter a Quiz Topic:').strip()
+num_questions = st.number_input('Enter Number of Questions:', min_value=1, max_value=10, step=1)
+
+def handle_answer_submission(selected_answer, correct_answer):
+    is_correct = selected_answer.strip() == correct_answer.strip()
+    st.session_state.user_answers.append(is_correct)
+    st.session_state.scores.append(1 if is_correct else 0)
+    if st.session_state.current_question + 1 == num_questions:
+        score = sum(st.session_state.scores)
+        st.write(f"Your score is: {score}/{num_questions}")
+        # Provide detailed feedback
+        for i in range(num_questions):
+            correct = "Correct" if st.session_state.user_answers[i] else "Incorrect"
+            st.write(f"Q{i+1}: {st.session_state.questions[i]} - {correct}")
+        reset_quiz_state()  # Reset for a new quiz
+    else:
+        st.session_state.current_question += 1
+
+# Generate/Display the quiz
+if st.button('Generate Quiz'):
+    reset_quiz_state()
+    for _ in range(num_questions):
+        question_text = generate_quiz_question(topic)
+        question, options, correct_answer = parse_question_answers_correct(question_text)
+        st.session_state.questions.append(question)
+        st.session_state.options.append(options)
+        st.session_state.correct_answers.append(correct_answer)
+
+if st.session_state.questions:
+    question = st.session_state.questions[st.session_state.current_question]
+    options = st.session_state.options[st.session_state.current_question]
+    correct_answer = st.session_state.correct_answers[st.session_state.current_question]
+    st.write(f"Question {st.session_state.current_question + 1}: {question}")
+    selected_answer = st.radio("Select an answer:", options, key=f"answer_{st.session_state.current_question}")
+
+    if st.button('Submit Answer'):
+        handle_answer_submission(selected_answer, correct_answer)
